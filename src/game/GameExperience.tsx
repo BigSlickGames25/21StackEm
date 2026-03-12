@@ -1,4 +1,4 @@
-import { Href, router } from "expo-router";
+import { Href, router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useEffect, useRef, useState } from "react";
@@ -56,6 +56,11 @@ import {
 } from "./world";
 
 const BUY_INS = [100, 500, 1000] as const;
+const DIFFICULTY_OPTIONS = [
+  { description: "Relaxed table pacing", key: "easy", label: "Easy" },
+  { description: "Default table flow", key: "standard", label: "Standard" },
+  { description: "Sharper table read", key: "hard", label: "Hard" }
+] as const;
 const SPECIAL_VALUE_OPTIONS: Array<{ label: string; rank: StandardTileRank }> = [
   { label: "A", rank: "A" },
   { label: "2", rank: "2" },
@@ -127,6 +132,7 @@ type PlacementFlight = {
 };
 type TutorialTargetKey = "banner" | "board-center" | "deal" | "lead-tile" | "none" | "queue" | "undo";
 type TutorialAdvanceMode = "action" | "manual";
+type SetupDifficulty = (typeof DIFFICULTY_OPTIONS)[number]["key"];
 type TutorialStep = {
   actionLabel?: string;
   advance: TutorialAdvanceMode;
@@ -151,14 +157,14 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     actionLabel: "Start Guide",
     advance: "manual",
-    body: "The top banner is your table readout. It shows ante, live bankroll, move cost, the 21 payout, and the bust penalty.",
+    body: "The top banner is your table readout. It tracks the ante, move cost, 21 payout, bust penalty, and your live wallet.",
     id: "intro",
     target: "banner",
     title: "StackBot Booting"
   },
   {
     advance: "action",
-    body: "Tap Deal to open a fresh table. Your bankroll starts at the ante, and every tile you place costs 1 percent of it.",
+    body: "Tap Start Table to open a fresh run. Your bankroll starts at the ante, and every tile you place costs 1 percent of it.",
     id: "deal",
     target: "deal",
     title: "Start The Round"
@@ -212,7 +218,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     actionLabel: "Back To Table",
     advance: "manual",
-    body: "You are ready to play live. Start a fresh run anytime, and reopen the guide from the control rail if you want another pass.",
+    body: "You are ready to play live. Reopen the guide from the splash screen before a run whenever you want another pass.",
     id: "done",
     target: "none",
     title: "Tutorial Complete"
@@ -262,7 +268,10 @@ export function GameExperience() {
   const device = useDeviceProfile();
   const { settings } = useGameSettings();
   const { profile, status } = useHubSession();
+  const params = useLocalSearchParams<{ tutorial?: string | string[] }>();
+  const tutorialParam = Array.isArray(params.tutorial) ? params.tutorial[0] : params.tutorial;
   const [selectedBuyIn, setSelectedBuyIn] = useState<number>(BUY_INS[0]);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<SetupDifficulty>("standard");
   const [world, setWorld] = useState<GameWorld | null>(null);
   const [hoveredCell, setHoveredCell] = useState<GridCell | null>(null);
   const [leaderboardBest, setLeaderboardBest] = useState(0);
@@ -295,6 +304,7 @@ export function GameExperience() {
   const undoButtonRef = useRef<View>(null);
   const boardMetricsRef = useRef<BoardMetrics | null>(null);
   const pendingPlacementWorldRef = useRef<GameWorld | null>(null);
+  const tutorialRouteHandledRef = useRef<string | null>(null);
   const worldRef = useRef<GameWorld | null>(null);
   const dragOffset = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const placementImpact = useRef(new Animated.Value(0)).current;
@@ -321,7 +331,7 @@ export function GameExperience() {
   const topHeight = isPortraitMobile
     ? clamp(Math.round(availableHeight * 0.11), 56, 72)
     : clamp(Math.round(availableHeight * 0.14), 64, 88);
-  const portraitBottomHeight = clamp(Math.round(availableHeight * 0.22), 132, 170);
+  const portraitBottomHeight = clamp(Math.round(availableHeight * 0.25), 156, 220);
   const radius = clamp(Math.round(frameWidth * 0.05), 18, 28);
   const boardPadX = isLandscapeMobile ? 8 : 10;
   const boardPadY = isPortraitMobile ? 4 : 8;
@@ -369,10 +379,7 @@ export function GameExperience() {
   const frameHeight = isPortraitMobile ? portraitFrameHeight : splitFrameHeight;
   const portraitQueueGap = clamp(Math.round(frameWidth * 0.014), 4, 8);
   const portraitControlWidth = clamp(Math.round(frameWidth * 0.3), 100, 136);
-  const portraitQueueWidth = Math.max(
-    132,
-    frameWidth - framePad * 2 - framePad * 2 - portraitControlWidth - frameGap
-  );
+  const portraitQueueWidth = Math.max(220, frameWidth - framePad * 4);
   const portraitQueueTileWidth = clamp(
     Math.floor((portraitQueueWidth - portraitQueueGap * 2) / 3),
     40,
@@ -430,24 +437,16 @@ export function GameExperience() {
   const canAfford =
     typeof profile?.nChips !== "number" || profile.nChips >= selectedBuyIn;
   const currentBuyIn = currentWorld?.buyIn ?? selectedBuyIn;
-  const currentBankroll = currentWorld?.bankroll ?? currentBuyIn;
   const currentMoveCost = currentWorld?.moveCost ?? calculateMoveCost(currentBuyIn);
   const currentBlackjackBonus = calculateBlackjackBonus(currentBuyIn);
   const currentBustPenalty = calculateBustPenalty(currentBuyIn);
-  const currentBankLabel = formatChipCount(currentBankroll);
+  const currentScoreLabel = formatChipCount(currentWorld?.score ?? selectedBuyIn);
   const undoRemaining = Math.max(0, UNDO_LIMIT - undosUsed);
   const undoAvailable =
     currentWorld?.status === "playing" &&
     undoStack.length > 0 &&
     undoRemaining > 0 &&
     (!tutorialActive || tutorialStep?.id === "undo");
-  const queueHint = isWildTile(leadTile)
-    ? "WILD: tap an empty cell, then choose A to 10."
-    : isSwapTile(leadTile)
-      ? "SWAP: tap a board tile, then choose A to 10."
-      : currentWorld
-        ? `${formatChipCount(currentMoveCost)}/tile`
-        : `${formatChipCount(calculateMoveCost(selectedBuyIn))}/tile`;
   const tutorialPlacementOpen =
     tutorialActive && tutorialStep?.id === "place-tile" && currentWorld?.turns === 0;
   const dragEnabled =
@@ -886,7 +885,6 @@ export function GameExperience() {
   }
 
   function startTutorial() {
-    setSelectedBuyIn(BUY_INS[0]);
     resetTransientState();
     setCelebrationBurst(null);
     setWarningBurst(null);
@@ -897,6 +895,21 @@ export function GameExperience() {
     setTutorialStepIndex(0);
     void fireHaptic(settings.haptics, "confirm");
   }
+
+  useEffect(() => {
+    if (!tutorialParam) {
+      tutorialRouteHandledRef.current = null;
+      return;
+    }
+
+    if (tutorialRouteHandledRef.current === tutorialParam || tutorialActive || currentWorld) {
+      return;
+    }
+
+    tutorialRouteHandledRef.current = tutorialParam;
+    startTutorial();
+    router.replace("/play" as Href);
+  }, [currentWorld, tutorialActive, tutorialParam]);
 
   function getBoardCellFrame(row: number, col: number): TileFrame | null {
     const metrics = boardMetricsRef.current;
@@ -1296,21 +1309,13 @@ export function GameExperience() {
   const burstRows = activeBustedRows;
   const burstCols = activeBustedCols;
   const effectsKind = celebrationBurst ? "celebrate" : warningBurst ? "warning" : null;
-  const bankStatLabel = currentWorld ? "Bank" : "Ante";
-  const dealButtonSubtitleLabel = canAfford
-    ? `${cardsLeft} cards - ${formatChipCount(currentMoveCost)}/tile`
-    : "Wallet below ante";
   const bannerRules = [
     { label: "Ante", value: formatChipCount(currentBuyIn) },
     { label: "Play", value: `-${formatChipCount(currentMoveCost)}` },
     { label: "21", value: `+${formatChipCount(currentBlackjackBonus)}` },
     { label: "Bust", value: `-${formatChipCount(currentBustPenalty)}` }
   ];
-  const bannerStats = [
-    { label: "Wallet", value: wallet },
-    { label: "Best", value: formatChipCount(leaderboardBest) },
-    { label: bankStatLabel, value: currentBankLabel }
-  ];
+  const bannerStats = [{ label: "Wallet", value: wallet }];
   const specialTargetLabel = pendingSpecialMove
     ? `Row ${pendingSpecialMove.target.row + 1} - Column ${pendingSpecialMove.target.col + 1}`
     : "";
@@ -1328,7 +1333,7 @@ export function GameExperience() {
     82,
     104
   );
-  const undoButtonLabel = `Undo ${undoRemaining}/${UNDO_LIMIT}`;
+  const showSetupOverlay = !currentWorld && !tutorialActive;
   const tutorialCardWidth = Math.min(
     isDesktop ? 380 : Math.max(300, frameWidth - outerPad * 2),
     frameWidth - outerPad * 2
@@ -1361,9 +1366,6 @@ export function GameExperience() {
         outerPad,
         device.width - tutorialCardWidth - outerPad
       );
-  const dealButtonSubtitle = canAfford
-    ? `${cardsLeft} cards · ${formatChipCount(currentMoveCost)}/tile`
-    : "Wallet below ante";
   const dragGhostLayer = dragGhost ? (
     <Animated.View
       pointerEvents="none"
@@ -1648,29 +1650,118 @@ export function GameExperience() {
       </View>
     </View>
   ) : null;
-  const runControlDisabled = dragging || interactionLocked || (!currentWorld && !canAfford);
-
-  const buyInControls = BUY_INS.map((buyIn) => {
-    const selected =
-      (currentWorld?.status === "playing" ? currentWorld.buyIn : selectedBuyIn) === buyIn;
-
-    return (
-      <Pressable
-        disabled={currentWorld?.status === "playing"}
-        key={buyIn}
-        onPress={() => setSelectedBuyIn(buyIn)}
-        style={({ pressed }) => [
-          styles.buyInChip,
-          selected && styles.buyInChipSelected,
-          pressed && currentWorld?.status !== "playing" && styles.buyInChipPressed
+  const setupOverlay = showSetupOverlay ? (
+    <View style={styles.setupOverlay}>
+      <View
+        style={[
+          styles.setupCard,
+          { width: Math.min(frameWidth, isDesktop ? 620 : 540) }
         ]}
       >
-        <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
-          {buyIn === 1000 ? "1K" : buyIn}
-        </Text>
-      </Pressable>
-    );
-  });
+        <LinearGradient
+          colors={["#133225", "#0a0f0d", "#38170f"]}
+          end={{ x: 1, y: 1 }}
+          start={{ x: 0, y: 0 }}
+          style={styles.setupHero}
+        >
+          <View style={[styles.bannerGlow, styles.bannerGlowWarm]} />
+          <View style={[styles.bannerGlow, styles.bannerGlowCool]} />
+          <Text style={styles.setupKicker}>New Table</Text>
+          <Text style={styles.setupTitle}>Choose your ante.</Text>
+          <Text style={styles.setupBody}>
+            Set the bankroll for this run, pick a difficulty profile, and deal into the grid.
+          </Text>
+        </LinearGradient>
+
+        <View style={styles.setupSection}>
+          <Text style={styles.setupSectionLabel}>Ante</Text>
+          <View style={styles.setupChipRow}>
+            {BUY_INS.map((buyIn) => {
+              const selected = selectedBuyIn === buyIn;
+
+              return (
+                <Pressable
+                  key={buyIn}
+                  onPress={() => setSelectedBuyIn(buyIn)}
+                  style={({ pressed }) => [
+                    styles.buyInChip,
+                    styles.setupChip,
+                    selected && styles.buyInChipSelected,
+                    pressed && styles.buyInChipPressed
+                  ]}
+                >
+                  <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
+                    {formatChipCount(buyIn)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.setupSection}>
+          <Text style={styles.setupSectionLabel}>Difficulty</Text>
+          <View style={styles.setupDifficultyStack}>
+            {DIFFICULTY_OPTIONS.map((option) => {
+              const selected = selectedDifficulty === option.key;
+
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => setSelectedDifficulty(option.key)}
+                  style={({ pressed }) => [
+                    styles.setupDifficultyCard,
+                    selected && styles.setupDifficultyCardSelected,
+                    pressed && styles.setupDifficultyCardPressed
+                  ]}
+                >
+                  <View style={styles.setupDifficultyCopy}>
+                    <Text
+                      style={[
+                        styles.setupDifficultyLabel,
+                        selected && styles.setupDifficultyLabelSelected
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <Text style={styles.setupDifficultyDescription}>{option.description}</Text>
+                  </View>
+                  <Text style={styles.setupDifficultyState}>{selected ? "Ready" : "Select"}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.setupFootnote}>
+            Difficulty tuning is the next pass. This selection is saved now so the start flow is in place.
+          </Text>
+        </View>
+
+        <View style={styles.setupActions}>
+          <GameButton
+            disabled={!canAfford}
+            label="Start Table"
+            onPress={startRun}
+            style={styles.setupPrimaryAction}
+            tone="primary"
+          />
+          <Pressable
+            onPress={startTutorial}
+            style={({ pressed }) => [
+              styles.setupHelpButton,
+              pressed && styles.setupHelpButtonPressed
+            ]}
+          >
+            <Text style={styles.setupHelpGlyph}>?</Text>
+          </Pressable>
+        </View>
+
+        {!canAfford ? (
+          <Text style={styles.setupWarning}>Wallet is below the selected ante.</Text>
+        ) : null}
+      </View>
+    </View>
+  ) : null;
+  const runControlDisabled = dragging || interactionLocked || (!currentWorld && !canAfford);
 
   function renderGameBanner(padding: number, compact: boolean) {
     return (
@@ -1699,10 +1790,6 @@ export function GameExperience() {
               <Text style={styles.bannerSubtitle}>
                 Play costs 1%. Hit 21 for 25%. Busts burn 10%.
               </Text>
-            </View>
-            <View style={styles.bannerAnteCard}>
-              <Text style={styles.bannerAnteLabel}>Live Ante</Text>
-              <Text style={styles.bannerAnteValue}>{formatChipCount(currentBuyIn)}</Text>
             </View>
           </View>
           <View style={styles.bannerRuleRow}>
@@ -1747,6 +1834,55 @@ export function GameExperience() {
     );
   }
 
+  function renderControlsPanel(compact: boolean) {
+    return (
+      <View style={[styles.controlMenu, compact && styles.controlMenuCompact]}>
+        <View ref={dealButtonRef}>
+          {currentWorld ? (
+            <LinearGradient
+              colors={["rgba(20, 58, 41, 0.96)", "rgba(9, 14, 11, 0.98)", "rgba(48, 24, 16, 0.94)"]}
+              end={{ x: 1, y: 1 }}
+              start={{ x: 0, y: 0 }}
+              style={styles.scoreCard}
+            >
+              <Text style={styles.scoreLabel}>Score</Text>
+              <Text numberOfLines={1} style={styles.scoreValue}>
+                {currentScoreLabel}
+              </Text>
+              <Text style={styles.scoreMeta}>{currentWorld.turns} moves played</Text>
+            </LinearGradient>
+          ) : (
+            <GameButton
+              compact
+              disabled={runControlDisabled}
+              label="Start Table"
+              onPress={startRun}
+              tone="primary"
+            />
+          )}
+        </View>
+
+        <View style={styles.utilityRow}>
+          <View ref={undoButtonRef} style={[styles.utilityButtonWrap, styles.utilityButtonWrapHalf]}>
+            <Pressable
+              disabled={!undoAvailable}
+              onPress={undoLastMove}
+              style={({ pressed }) => [
+                styles.utilityButton,
+                styles.utilityButtonIcon,
+                !undoAvailable && styles.utilityButtonDisabled,
+                pressed && undoAvailable && styles.utilityButtonPressed
+              ]}
+            >
+              <Text style={styles.utilityGlyph}>{"\u21B6"}</Text>
+              <Text style={styles.utilityMeta}>{undoRemaining}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   function renderQueueContent(
     tile: StackTile | null,
     tileWidth: number,
@@ -1754,11 +1890,7 @@ export function GameExperience() {
     lead: boolean
   ) {
     if (!tile) {
-      return (
-        <View style={[styles.emptyTile, { height: tileHeight, width: tileWidth }]}>
-          <Text style={styles.emptyTileText}>EMPTY</Text>
-        </View>
-      );
+      return <View style={[styles.emptyTile, { height: tileHeight, width: tileWidth }]} />;
     }
 
     return <TileFace compact dense={queueDense} dimmed={!lead} lead={lead} tile={tile} />;
@@ -2194,55 +2326,14 @@ export function GameExperience() {
         { borderRadius: radius, minHeight: portraitBottomHeight, padding: framePad }
       ]}
     >
-      <View style={[styles.bottomMain, { gap: frameGap }]}>
-        <View style={[styles.controlWell, { width: portraitControlWidth }]}>
-          <View style={styles.buyInRow}>{buyInControls}</View>
-          <View ref={dealButtonRef}>
-            <GameButton
-              compact
-              disabled={runControlDisabled}
-              label={currentWorld?.status === "playing" ? "Redeal" : "Deal"}
-              onPress={currentWorld?.status === "playing" ? restartRun : startRun}
-              subtitle={dealButtonSubtitleLabel}
-              subtitleStyle={styles.actionSubtitle}
-              tone="primary"
-            />
-          </View>
-          <View style={styles.utilityRow}>
-            <View ref={undoButtonRef} style={styles.utilityButtonWrap}>
-              <Pressable
-                disabled={!undoAvailable}
-                onPress={undoLastMove}
-                style={({ pressed }) => [
-                  styles.utilityButton,
-                  !undoAvailable && styles.utilityButtonDisabled,
-                  pressed && undoAvailable && styles.utilityButtonPressed
-                ]}
-              >
-                <Text style={styles.utilityButtonText}>{undoButtonLabel}</Text>
-              </Pressable>
+      <View style={[styles.bottomMain, styles.bottomMainPortrait, { gap: frameGap }]}>
+        <View style={[styles.controlWell, styles.controlWellFull]}>{renderControlsPanel(false)}</View>
+        <View style={[styles.queueWell, styles.queueWellStructured]}>
+          <View style={[styles.controlSectionSurface, styles.queueSurface]}>
+            <View ref={queueStageRef}>
+              {renderQueue(portraitQueueTileWidth, portraitQueueTileHeight, portraitQueueGap)}
             </View>
-            <Pressable
-              onPress={tutorialActive ? stopTutorial : startTutorial}
-              style={({ pressed }) => [
-                styles.utilityButton,
-                styles.utilityButtonAccent,
-                pressed && styles.utilityButtonPressed
-              ]}
-            >
-              <Text style={styles.utilityButtonText}>
-                {tutorialActive ? "Exit Guide" : "Tutorial"}
-              </Text>
-            </Pressable>
           </View>
-        </View>
-        <View style={styles.queueWell}>
-          <View ref={queueStageRef}>
-            {renderQueue(portraitQueueTileWidth, portraitQueueTileHeight, portraitQueueGap)}
-          </View>
-          <Text numberOfLines={2} style={styles.queueHint}>
-            {queueHint}
-          </Text>
         </View>
       </View>
     </View>
@@ -2253,12 +2344,9 @@ export function GameExperience() {
       {renderGameBanner(railPad, true)}
 
       <View style={[styles.strip, styles.sideCard, { borderRadius: radius, padding: railPad }]}>
-        <View ref={queueStageRef}>
+        <View style={[styles.controlSectionSurface, styles.queueSurface]} ref={queueStageRef}>
           {renderQueue(railQueueTileWidth, railQueueTileHeight, railGap)}
         </View>
-        <Text numberOfLines={2} style={styles.queueHint}>
-          {queueHint}
-        </Text>
       </View>
 
       <View
@@ -2269,45 +2357,7 @@ export function GameExperience() {
           { borderRadius: radius, padding: railPad }
         ]}
       >
-        <View style={styles.buyInRow}>{buyInControls}</View>
-        <View ref={dealButtonRef}>
-          <GameButton
-            compact
-            disabled={runControlDisabled}
-            label={currentWorld?.status === "playing" ? "Redeal" : "Deal"}
-            onPress={currentWorld?.status === "playing" ? restartRun : startRun}
-            subtitle={dealButtonSubtitleLabel}
-            subtitleStyle={styles.actionSubtitle}
-            tone="primary"
-          />
-        </View>
-        <View style={styles.utilityRow}>
-          <View ref={undoButtonRef} style={styles.utilityButtonWrap}>
-            <Pressable
-              disabled={!undoAvailable}
-              onPress={undoLastMove}
-              style={({ pressed }) => [
-                styles.utilityButton,
-                !undoAvailable && styles.utilityButtonDisabled,
-                pressed && undoAvailable && styles.utilityButtonPressed
-              ]}
-            >
-              <Text style={styles.utilityButtonText}>{undoButtonLabel}</Text>
-            </Pressable>
-          </View>
-          <Pressable
-            onPress={tutorialActive ? stopTutorial : startTutorial}
-            style={({ pressed }) => [
-              styles.utilityButton,
-              styles.utilityButtonAccent,
-              pressed && styles.utilityButtonPressed
-            ]}
-          >
-            <Text style={styles.utilityButtonText}>
-              {tutorialActive ? "Exit Guide" : "Tutorial"}
-            </Text>
-          </Pressable>
-        </View>
+        {renderControlsPanel(true)}
       </View>
 
     </View>
@@ -2357,6 +2407,7 @@ export function GameExperience() {
           </ScrollView>
         </SafeAreaView>
         {specialChoiceOverlay}
+        {setupOverlay}
         {placementFlightLayer}
         {dragGhostLayer}
         {tutorialOverlay}
@@ -2371,6 +2422,7 @@ export function GameExperience() {
         <View style={[styles.stage, { padding: outerPad }]}>{splitShell}</View>
       </SafeAreaView>
       {specialChoiceOverlay}
+      {setupOverlay}
       {placementFlightLayer}
       {dragGhostLayer}
       {tutorialOverlay}
@@ -3113,6 +3165,7 @@ const styles = StyleSheet.create({
   },
   boardWrap: { alignItems: "center", flex: 1, justifyContent: "center" },
   bottomMain: { flex: 1, flexDirection: "row" },
+  bottomMainPortrait: { flexDirection: "column" },
   bottomStrip: { gap: theme.spacing.sm },
   buyInChip: {
     alignItems: "center",
@@ -3120,13 +3173,16 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: 999,
     borderWidth: 1,
-    flex: 1,
+    flexBasis: 0,
+    flexGrow: 1,
     justifyContent: "center",
-    minHeight: 34
+    minHeight: 38,
+    minWidth: 56
   },
   buyInChipPressed: { opacity: 0.84 },
   buyInChipSelected: { backgroundColor: theme.colors.surface },
-  buyInRow: { flexDirection: "row", gap: theme.spacing.xs },
+  buyInRow: { flexDirection: "row", gap: theme.spacing.xs, width: "100%" },
+  buyInRowCompact: { flexWrap: "wrap" },
   buyInText: { color: theme.colors.text, fontFamily: theme.fonts.bodyBold, fontSize: 12 },
   buyInTextSelected: { color: "#050505" },
   cell: {
@@ -3166,7 +3222,27 @@ const styles = StyleSheet.create({
     borderColor: "rgba(125, 255, 178, 0.26)"
   },
   cellVoidPlayable: { borderStyle: "dashed" },
+  controlMenu: { gap: theme.spacing.sm, width: "100%" },
+  controlMenuCompact: { gap: theme.spacing.xs },
+  controlSection: { gap: theme.spacing.xs, width: "100%" },
+  controlSectionLabel: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textTransform: "uppercase"
+  },
+  controlSectionSurface: {
+    backgroundColor: "rgba(255, 255, 255, 0.035)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    width: "100%"
+  },
   controlWell: { gap: theme.spacing.sm, justifyContent: "space-between" },
+  controlWellFull: { width: "100%" },
   dragGhost: {
     elevation: 18,
     position: "absolute",
@@ -3328,12 +3404,210 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "visible"
   },
+  queueSurface: {
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  queueWellStructured: {
+    alignItems: "stretch",
+    width: "100%"
+  },
+  queueHintStructured: {
+    textAlign: "left"
+  },
   root: { backgroundColor: theme.colors.background, flex: 1, overflow: "hidden" },
   safe: { flex: 1 },
   sideCard: { gap: theme.spacing.sm },
   sideControls: { gap: theme.spacing.sm },
   sideRail: { flexShrink: 0 },
   splitFrame: { alignItems: "stretch", flexDirection: "row" },
+  setupActions: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupBody: {
+    color: "rgba(241, 245, 233, 0.84)",
+    fontFamily: theme.fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 420
+  },
+  setupCard: {
+    backgroundColor: "rgba(10, 12, 14, 0.98)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    overflow: "hidden",
+    padding: theme.spacing.md,
+    shadowColor: "#000000",
+    shadowOffset: { height: 20, width: 0 },
+    shadowOpacity: 0.34,
+    shadowRadius: 28
+  },
+  setupChip: {
+    minHeight: 46,
+    minWidth: 84,
+    paddingHorizontal: theme.spacing.md
+  },
+  setupChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupDifficultyCard: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.035)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm
+  },
+  setupDifficultyCardPressed: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)"
+  },
+  setupDifficultyCardSelected: {
+    backgroundColor: "rgba(110, 255, 186, 0.12)",
+    borderColor: "rgba(110, 255, 186, 0.34)"
+  },
+  setupDifficultyCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0
+  },
+  setupDifficultyDescription: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.body,
+    fontSize: 12,
+    lineHeight: 17
+  },
+  setupDifficultyLabel: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.bodyBold,
+    fontSize: 15
+  },
+  setupDifficultyLabelSelected: {
+    color: "#dfffea"
+  },
+  setupDifficultyStack: {
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupDifficultyState: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  setupFootnote: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.body,
+    fontSize: 11,
+    lineHeight: 16
+  },
+  setupHelpButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderColor: "rgba(255, 255, 255, 0.14)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 64,
+    width: 64
+  },
+  setupHelpButtonPressed: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)"
+  },
+  setupHelpGlyph: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.display,
+    fontSize: 28,
+    lineHeight: 28
+  },
+  setupHero: {
+    borderRadius: theme.radius.xl,
+    gap: theme.spacing.xs,
+    overflow: "hidden",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    position: "relative"
+  },
+  setupKicker: {
+    color: "#8ef0bc",
+    fontFamily: theme.fonts.label,
+    fontSize: 11,
+    letterSpacing: 1.8,
+    textTransform: "uppercase"
+  },
+  setupOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    backgroundColor: "rgba(5, 5, 5, 0.78)",
+    justifyContent: "center",
+    padding: theme.spacing.lg,
+    zIndex: 50
+  },
+  setupPrimaryAction: {
+    flex: 1
+  },
+  setupSection: {
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupSectionLabel: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: "uppercase"
+  },
+  setupTitle: {
+    color: "#f4f9ec",
+    fontFamily: theme.fonts.display,
+    fontSize: 36,
+    lineHeight: 36
+  },
+  setupWarning: {
+    color: "#ffb1b1",
+    fontFamily: theme.fonts.bodyBold,
+    fontSize: 12
+  },
+  scoreCard: {
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: 4,
+    minHeight: 64,
+    overflow: "hidden",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm
+  },
+  scoreLabel: {
+    color: "rgba(240, 246, 231, 0.7)",
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textTransform: "uppercase"
+  },
+  scoreMeta: {
+    color: "rgba(241, 245, 233, 0.72)",
+    fontFamily: theme.fonts.body,
+    fontSize: 12
+  },
+  scoreValue: {
+    color: "#f6f9ef",
+    fontFamily: theme.fonts.display,
+    fontSize: 26,
+    lineHeight: 26
+  },
   stage: { alignItems: "center", flex: 1, justifyContent: "center" },
   stat: {
     backgroundColor: theme.colors.cardMuted,
@@ -3742,9 +4016,36 @@ const styles = StyleSheet.create({
   utilityButtonDisabled: {
     opacity: 0.42
   },
+  utilityButtonHelp: {
+    backgroundColor: "rgba(110, 255, 186, 0.12)",
+    borderColor: "rgba(110, 255, 186, 0.34)"
+  },
+  utilityButtonIcon: {
+    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.xs,
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.md
+  },
+  utilityButtonFull: {
+    width: "100%"
+  },
+  utilityGlyph: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.display,
+    fontSize: 24,
+    lineHeight: 24
+  },
   utilityButtonAccent: {
     backgroundColor: "rgba(110, 255, 186, 0.12)",
     borderColor: "rgba(110, 255, 186, 0.34)"
+  },
+  utilityMeta: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
   },
   utilityButtonPressed: {
     backgroundColor: "rgba(255, 255, 255, 0.14)"
@@ -3757,10 +4058,17 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   utilityButtonWrap: {
+    width: "100%"
+  },
+  utilityButtonWrapHalf: {
     flex: 1
+  },
+  utilityColumn: {
+    gap: theme.spacing.xs
   },
   utilityRow: {
     flexDirection: "row",
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    width: "100%"
   }
 });
