@@ -2,6 +2,7 @@ export const GRID_SIZE = 5;
 export const HAND_SIZE = 3;
 export const TARGET_TOTAL = 21;
 export const DECK_PASSES = 3;
+export type GameDifficultyKey = "easy" | "medium" | "hard";
 
 export type StandardTileRank =
   | "A"
@@ -61,12 +62,15 @@ export interface StackemResult {
 }
 
 export interface GameWorld {
+  blackjackBonus: number;
   board: Array<Array<StackTile | null>>;
   bankroll: number;
   buyIn: number;
+  bustPenalty: number;
   columnLines: LineSummary[];
   combo: number;
   deck: StackTile[];
+  difficulty: GameDifficultyKey;
   event: GameEvent;
   eventNonce: number;
   lastPlacement: { col: number; row: number } | null;

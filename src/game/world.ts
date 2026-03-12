@@ -1,5 +1,6 @@
 import {
   DECK_PASSES,
+  GameDifficultyKey,
   GameWorld,
   GRID_SIZE,
   HAND_SIZE,
@@ -32,33 +33,59 @@ const BLACKJACK_BONUS_RATE = 0.25;
 const BUST_PENALTY_RATE = 0.1;
 
 export const SHOE_COUNT = DECK_PASSES * (STANDARD_RANKS.length * 4 + SPECIAL_TILES_PER_PASS);
+export type WorldDifficultyConfig = {
+  blackjackBonusMultiplier?: number;
+  bustPenaltyMultiplier?: number;
+  difficulty?: GameDifficultyKey;
+  openingTiles?: number;
+};
 
 export function calculateMoveCost(buyIn: number) {
   return Math.max(1, Math.round(buyIn * MOVE_COST_RATE));
 }
 
-export function calculateBlackjackBonus(buyIn: number) {
-  return Math.max(1, Math.round(buyIn * BLACKJACK_BONUS_RATE));
+export function calculateBlackjackBonus(buyIn: number, multiplier = 1) {
+  return Math.max(1, Math.round(buyIn * BLACKJACK_BONUS_RATE * multiplier));
 }
 
-export function calculateBustPenalty(buyIn: number) {
-  return Math.max(1, Math.round(buyIn * BUST_PENALTY_RATE));
+export function calculateBustPenalty(buyIn: number, multiplier = 1) {
+  return Math.max(1, Math.round(buyIn * BUST_PENALTY_RATE * multiplier));
 }
 
-export function createWorld(buyIn: number, runId = Date.now()): GameWorld {
+export function createWorld(
+  buyIn: number,
+  difficultyConfig: WorldDifficultyConfig = {},
+  runId = Date.now()
+): GameWorld {
   const deck = buildDeck();
-  const board = createEmptyBoard();
-  const { deck: nextDeck, drawn } = drawTiles(deck, HAND_SIZE);
+  const seededOpening = seedOpeningBoard(
+    deck,
+    createEmptyBoard(),
+    difficultyConfig.openingTiles ?? 0
+  );
+  const blackjackBonus = calculateBlackjackBonus(
+    buyIn,
+    difficultyConfig.blackjackBonusMultiplier ?? 1
+  );
+  const bustPenalty = calculateBustPenalty(
+    buyIn,
+    difficultyConfig.bustPenaltyMultiplier ?? 1
+  );
+  const { deck: nextDeck, drawn } = drawTiles(seededOpening.deck, HAND_SIZE);
+  const board = seededOpening.board;
   const rowLines = buildRowLines(board);
   const columnLines = buildColumnLines(board);
 
   return {
+    blackjackBonus,
     bankroll: buyIn,
     board,
     buyIn,
+    bustPenalty,
     columnLines,
     combo: 0,
     deck: nextDeck,
+    difficulty: difficultyConfig.difficulty ?? "easy",
     event: "start",
     eventNonce: 1,
     lastPlacement: null,
@@ -266,8 +293,8 @@ function resolveTurn(
     .map((line) => line.index);
   const blackjackCount = hitRows.length + hitColumns.length;
   const bustCount = bustRows.length + bustColumns.length;
-  const blackjackBonus = calculateBlackjackBonus(world.buyIn);
-  const bustPenalty = calculateBustPenalty(world.buyIn);
+  const blackjackBonus = world.blackjackBonus;
+  const bustPenalty = world.bustPenalty;
   const reward = blackjackCount * blackjackBonus;
   const penalty = bustCount * bustPenalty;
   const bankroll = Math.max(0, world.bankroll - world.moveCost + reward - penalty);
@@ -454,6 +481,89 @@ function createEmptyBoard() {
 
 function cloneBoard(board: GameWorld["board"]) {
   return board.map((row) => [...row]);
+}
+
+function seedOpeningBoard(deck: StackTile[], board: GameWorld["board"], count: number) {
+  if (!count) {
+    return {
+      board,
+      deck
+    };
+  }
+
+  const nextBoard = cloneBoard(board);
+  const nextDeck = [...deck];
+  const openCells = shuffleCells(
+    Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, index) => ({
+      col: index % GRID_SIZE,
+      row: Math.floor(index / GRID_SIZE)
+    }))
+  );
+  let placed = 0;
+
+  while (placed < count && openCells.length) {
+    const cellIndex = openCells.findIndex((cell) =>
+      nextDeck.some(
+        (tile) =>
+          tile.kind === "standard" &&
+          canSeedTileAt(nextBoard, cell.row, cell.col, tile)
+      )
+    );
+
+    if (cellIndex < 0) {
+      break;
+    }
+
+    const [cell] = openCells.splice(cellIndex, 1);
+    const tileIndex = nextDeck.findIndex(
+      (tile) =>
+        tile.kind === "standard" &&
+        canSeedTileAt(nextBoard, cell.row, cell.col, tile)
+    );
+
+    if (tileIndex < 0) {
+      continue;
+    }
+
+    nextBoard[cell.row][cell.col] = nextDeck[tileIndex];
+    nextDeck.splice(tileIndex, 1);
+    placed += 1;
+  }
+
+  return {
+    board: nextBoard,
+    deck: nextDeck
+  };
+}
+
+function canSeedTileAt(
+  board: GameWorld["board"],
+  row: number,
+  col: number,
+  tile: StackTile
+) {
+  if (tile.kind !== "standard" || board[row][col]) {
+    return false;
+  }
+
+  const candidateBoard = cloneBoard(board);
+  candidateBoard[row][col] = tile;
+  const nextRow = buildRowLines(candidateBoard)[row];
+  const nextColumn = buildColumnLines(candidateBoard)[col];
+
+  return nextRow.total < TARGET_TOTAL && nextColumn.total < TARGET_TOTAL;
+}
+
+function shuffleCells(cells: Array<{ col: number; row: number }>) {
+  for (let index = cells.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = cells[index];
+
+    cells[index] = cells[swapIndex];
+    cells[swapIndex] = current;
+  }
+
+  return cells;
 }
 
 function drawTiles(deck: StackTile[], count: number) {

@@ -57,9 +57,30 @@ import {
 
 const BUY_INS = [100, 500, 1000] as const;
 const DIFFICULTY_OPTIONS = [
-  { description: "Relaxed table pacing", key: "easy", label: "Easy" },
-  { description: "Default table flow", key: "standard", label: "Standard" },
-  { description: "Sharper table read", key: "hard", label: "Hard" }
+  {
+    bonusMultiplier: 1,
+    description: "Empty opening grid. Standard 21 bonus and bust penalty.",
+    key: "easy",
+    label: "Easy",
+    openingTiles: 0,
+    penaltyMultiplier: 1
+  },
+  {
+    bonusMultiplier: 2,
+    description: "3 tiles already on the grid. 21 bonus and bust penalty are both doubled.",
+    key: "medium",
+    label: "Medium",
+    openingTiles: 3,
+    penaltyMultiplier: 2
+  },
+  {
+    bonusMultiplier: 4,
+    description: "6 tiles already on the grid. 21 bonus is 4x while bust penalty stays standard.",
+    key: "hard",
+    label: "Hard",
+    openingTiles: 6,
+    penaltyMultiplier: 1
+  }
 ] as const;
 const SPECIAL_VALUE_OPTIONS: Array<{ label: string; rank: StandardTileRank }> = [
   { label: "A", rank: "A" },
@@ -133,6 +154,7 @@ type PlacementFlight = {
 type TutorialTargetKey = "banner" | "board-center" | "deal" | "lead-tile" | "none" | "queue" | "undo";
 type TutorialAdvanceMode = "action" | "manual";
 type SetupDifficulty = (typeof DIFFICULTY_OPTIONS)[number]["key"];
+type SetupStep = "splash" | "ante" | "difficulty";
 type TutorialStep = {
   actionLabel?: string;
   advance: TutorialAdvanceMode;
@@ -271,7 +293,8 @@ export function GameExperience() {
   const params = useLocalSearchParams<{ tutorial?: string | string[] }>();
   const tutorialParam = Array.isArray(params.tutorial) ? params.tutorial[0] : params.tutorial;
   const [selectedBuyIn, setSelectedBuyIn] = useState<number>(BUY_INS[0]);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<SetupDifficulty>("standard");
+  const [selectedDifficulty, setSelectedDifficulty] = useState<SetupDifficulty>("easy");
+  const [setupStep, setSetupStep] = useState<SetupStep>("splash");
   const [world, setWorld] = useState<GameWorld | null>(null);
   const [hoveredCell, setHoveredCell] = useState<GridCell | null>(null);
   const [leaderboardBest, setLeaderboardBest] = useState(0);
@@ -435,10 +458,17 @@ export function GameExperience() {
       : null;
   const canAfford =
     typeof profile?.nChips !== "number" || profile.nChips >= selectedBuyIn;
+  const selectedDifficultyOption =
+    DIFFICULTY_OPTIONS.find((option) => option.key === selectedDifficulty) ??
+    DIFFICULTY_OPTIONS[0];
   const currentBuyIn = currentWorld?.buyIn ?? selectedBuyIn;
   const currentMoveCost = currentWorld?.moveCost ?? calculateMoveCost(currentBuyIn);
-  const currentBlackjackBonus = calculateBlackjackBonus(currentBuyIn);
-  const currentBustPenalty = calculateBustPenalty(currentBuyIn);
+  const currentBlackjackBonus =
+    currentWorld?.blackjackBonus ??
+    calculateBlackjackBonus(currentBuyIn, selectedDifficultyOption.bonusMultiplier);
+  const currentBustPenalty =
+    currentWorld?.bustPenalty ??
+    calculateBustPenalty(currentBuyIn, selectedDifficultyOption.penaltyMultiplier);
   const currentScoreLabel = formatChipCount(currentWorld?.score ?? selectedBuyIn);
   const undoRemaining = Math.max(0, UNDO_LIMIT - undosUsed);
   const undoAvailable =
@@ -887,12 +917,18 @@ export function GameExperience() {
     resetTransientState();
     setCelebrationBurst(null);
     setWarningBurst(null);
+    setSetupStep("splash");
     setUndoStack([]);
     setUndosUsed(0);
     setWorld(null);
     setTutorialUndoComplete(false);
     setTutorialStepIndex(0);
     void fireHaptic(settings.haptics, "confirm");
+  }
+
+  function goToSetupStep(step: SetupStep) {
+    setSetupStep(step);
+    void fireHaptic(settings.haptics, "tap");
   }
 
   useEffect(() => {
@@ -1230,6 +1266,19 @@ export function GameExperience() {
     void fireHaptic(settings.haptics, "tap");
   }
 
+  function buildDifficultyConfig(difficultyKey: SetupDifficulty) {
+    const option =
+      DIFFICULTY_OPTIONS.find((candidate) => candidate.key === difficultyKey) ??
+      DIFFICULTY_OPTIONS[0];
+
+    return {
+      blackjackBonusMultiplier: option.bonusMultiplier,
+      bustPenaltyMultiplier: option.penaltyMultiplier,
+      difficulty: option.key,
+      openingTiles: option.openingTiles
+    };
+  }
+
   function startRun() {
     if (!canAfford) {
       return;
@@ -1243,11 +1292,14 @@ export function GameExperience() {
     setDragging(false);
     setDragGhost(null);
     setHoveredCell(null);
-    setWorld(createWorld(selectedBuyIn));
+    setSetupStep("splash");
+    setWorld(createWorld(selectedBuyIn, buildDifficultyConfig(selectedDifficulty)));
     void fireHaptic(settings.haptics, "confirm");
   }
 
   function restartRun() {
+    const difficultyKey = currentWorld?.difficulty ?? selectedDifficulty;
+
     resetTransientState();
     setCelebrationBurst(null);
     setWarningBurst(null);
@@ -1256,7 +1308,8 @@ export function GameExperience() {
     setDragging(false);
     setDragGhost(null);
     setHoveredCell(null);
-    setWorld(createWorld(currentWorld?.buyIn ?? selectedBuyIn));
+    setSetupStep("splash");
+    setWorld(createWorld(currentWorld?.buyIn ?? selectedBuyIn, buildDifficultyConfig(difficultyKey)));
     void fireHaptic(settings.haptics, "confirm");
   }
 
@@ -1318,6 +1371,26 @@ export function GameExperience() {
     { label: "Wallet", value: wallet },
     { label: "Score", value: currentScoreLabel }
   ];
+  const activeSetupStep: SetupStep =
+    tutorialActive && tutorialStep?.id === "deal" ? "difficulty" : setupStep;
+  const setupStepIndex =
+    activeSetupStep === "splash" ? 0 : activeSetupStep === "ante" ? 1 : 2;
+  const setupWizardTitle =
+    activeSetupStep === "splash"
+      ? "21 Stackem"
+      : activeSetupStep === "ante"
+        ? "Select your ante."
+        : "Select your difficulty.";
+  const setupWizardBody =
+    activeSetupStep === "splash"
+      ? "Walk through a short guided start flow, then deal straight into the table."
+      : activeSetupStep === "ante"
+        ? "Your ante is the bankroll you sit down with. Every tile placement costs 1 percent of it."
+        : "Difficulty changes the opening board and how big the 21 rewards and bust penalties are.";
+  const setupSelectedOpeningLabel = selectedDifficultyOption.openingTiles
+    ? `${selectedDifficultyOption.openingTiles} seeded tiles`
+    : "Empty grid";
+  const showSetupOverlay = !currentWorld && (!tutorialActive || tutorialStep?.id === "deal");
   const specialTargetLabel = pendingSpecialMove
     ? `Row ${pendingSpecialMove.target.row + 1} - Column ${pendingSpecialMove.target.col + 1}`
     : "";
@@ -1335,7 +1408,6 @@ export function GameExperience() {
     82,
     104
   );
-  const showSetupOverlay = !currentWorld && !tutorialActive;
   const tutorialCardWidth = Math.min(
     isDesktop ? 380 : Math.max(300, frameWidth - outerPad * 2),
     frameWidth - outerPad * 2
@@ -1654,134 +1726,305 @@ export function GameExperience() {
   ) : null;
   const setupOverlay = showSetupOverlay ? (
     <View style={styles.setupOverlay}>
-      <View
-        style={[
-          styles.setupCard,
-          { width: Math.min(frameWidth, isDesktop ? 620 : 540) }
-        ]}
+      <ScrollView
+        bounces={false}
+        contentContainerStyle={styles.setupOverlayContent}
+        showsVerticalScrollIndicator={false}
+        style={styles.setupOverlayScroll}
       >
-        <LinearGradient
-          colors={["#133225", "#0a0f0d", "#38170f"]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={styles.setupHero}
+        <View
+          style={[
+            styles.setupCard,
+            { width: Math.min(frameWidth, isDesktop ? 540 : 480) }
+          ]}
         >
-          <View style={[styles.bannerGlow, styles.bannerGlowWarm]} />
-          <View style={[styles.bannerGlow, styles.bannerGlowCool]} />
-          <Text style={styles.setupKicker}>New Table</Text>
-          <Text style={styles.setupTitle}>Choose your ante.</Text>
-          <Text style={styles.setupBody}>
-            Set the bankroll for this run, pick a difficulty profile, and deal into the grid.
-          </Text>
-        </LinearGradient>
-
-        <View style={styles.setupSection}>
-          <Text style={styles.controlSectionLabel}>Ante</Text>
-          <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-            <Text style={styles.setupSectionHint}>Pick the bankroll for this run.</Text>
-            <View style={styles.setupChipRow}>
-              {BUY_INS.map((buyIn) => {
-                const selected = selectedBuyIn === buyIn;
-
-                return (
-                  <Pressable
-                    key={buyIn}
-                    onPress={() => setSelectedBuyIn(buyIn)}
-                    style={({ pressed }) => [
-                      styles.buyInChip,
-                      styles.setupChip,
-                      selected && styles.buyInChipSelected,
-                      pressed && styles.buyInChipPressed
-                    ]}
-                  >
-                    <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
-                      {formatChipCount(buyIn)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.setupSection}>
-          <Text style={styles.controlSectionLabel}>Difficulty</Text>
-          <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-            <Text style={styles.setupSectionHint}>Choose the table profile for this run.</Text>
-            <View style={styles.setupDifficultyStack}>
-              {DIFFICULTY_OPTIONS.map((option) => {
-                const selected = selectedDifficulty === option.key;
+          <LinearGradient
+            colors={["#133225", "#0a0f0d", "#38170f"]}
+            end={{ x: 1, y: 1 }}
+            start={{ x: 0, y: 0 }}
+            style={styles.setupHero}
+          >
+            <View style={[styles.bannerGlow, styles.bannerGlowWarm]} />
+            <View style={[styles.bannerGlow, styles.bannerGlowCool]} />
+            <Text style={styles.setupKicker}>
+              {activeSetupStep === "splash" ? "Guided Start" : `Step ${setupStepIndex + 1} of 3`}
+            </Text>
+            <Text style={styles.setupTitle}>{setupWizardTitle}</Text>
+            <Text style={styles.setupBody}>{setupWizardBody}</Text>
+            <View style={styles.setupProgressRow}>
+              {["Welcome", "Ante", "Difficulty"].map((label, index) => {
+                const active = index === setupStepIndex;
+                const complete = index < setupStepIndex;
 
                 return (
-                  <Pressable
-                    key={option.key}
-                    onPress={() => setSelectedDifficulty(option.key)}
-                    style={({ pressed }) => [
-                      styles.setupDifficultyCard,
-                      selected && styles.setupDifficultyCardSelected,
-                      pressed && styles.setupDifficultyCardPressed
-                    ]}
-                  >
-                    <View style={styles.setupDifficultyCopy}>
-                      <Text
-                        style={[
-                          styles.setupDifficultyLabel,
-                          selected && styles.setupDifficultyLabelSelected
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                      <Text style={styles.setupDifficultyDescription}>{option.description}</Text>
-                    </View>
+                  <View key={label} style={styles.setupProgressStep}>
+                    <View
+                      style={[
+                        styles.setupProgressDot,
+                        active && styles.setupProgressDotActive,
+                        complete && styles.setupProgressDotComplete
+                      ]}
+                    />
                     <Text
                       style={[
-                        styles.setupDifficultyState,
-                        selected && styles.setupDifficultyStateSelected
+                        styles.setupProgressLabel,
+                        active && styles.setupProgressLabelActive
                       ]}
                     >
-                      {selected ? "Ready" : "Select"}
+                      {label}
                     </Text>
-                  </Pressable>
+                  </View>
                 );
               })}
             </View>
-            <Text style={styles.setupFootnote}>
-              Difficulty tuning is the next pass. This selection is saved now so the start flow is in place.
-            </Text>
-          </View>
-        </View>
+          </LinearGradient>
 
-        <View style={styles.setupSection}>
-          <Text style={styles.controlSectionLabel}>Table</Text>
-          <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-            <Text style={styles.setupSectionHint}>
-              Start a new run or launch the guided tutorial.
-            </Text>
-            <View style={styles.setupActions}>
-              <View ref={dealButtonRef} style={styles.setupPrimaryAction}>
-                <GameButton
-                  disabled={!canAfford}
-                  label="Start Table"
-                  onPress={startRun}
-                  tone="primary"
-                />
+          {activeSetupStep === "splash" ? (
+            <>
+              <View style={styles.setupSection}>
+                <Text style={styles.controlSectionLabel}>Table Flow</Text>
+                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+                  <View style={styles.setupIntroGrid}>
+                    {[
+                      {
+                        detail: "Pick the bankroll you bring to the table.",
+                        step: "1 Ante"
+                      },
+                      {
+                        detail: "Choose how hot the opening board plays.",
+                        step: "2 Difficulty"
+                      },
+                      {
+                        detail: "Deal in and start chasing 21s.",
+                        step: "3 Play"
+                      }
+                    ].map((item) => (
+                      <View key={item.step} style={styles.setupIntroCard}>
+                        <Text style={styles.setupIntroStep}>{item.step}</Text>
+                        <Text style={styles.setupIntroDetail}>{item.detail}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
               </View>
-              <Pressable
-                onPress={startTutorial}
-                style={({ pressed }) => [
-                  styles.setupHelpButton,
-                  pressed && styles.setupHelpButtonPressed
-                ]}
-              >
-                <Text style={styles.setupHelpGlyph}>?</Text>
-              </Pressable>
-            </View>
-            {!canAfford ? (
-              <Text style={styles.setupWarning}>Wallet is below the selected ante.</Text>
-            ) : null}
-          </View>
+
+              <View style={styles.setupSection}>
+                <Text style={styles.controlSectionLabel}>Table Snapshot</Text>
+                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+                  <View style={styles.setupMetaGrid}>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Grid</Text>
+                      <Text style={styles.setupMetaValue}>5 x 5</Text>
+                    </View>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Queue</Text>
+                      <Text style={styles.setupMetaValue}>3 live tiles</Text>
+                    </View>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Undo</Text>
+                      <Text style={styles.setupMetaValue}>3 per run</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.setupActions}>
+                <View style={styles.setupPrimaryAction}>
+                  <GameButton
+                    compact
+                    label="Select Ante"
+                    onPress={() => goToSetupStep("ante")}
+                    tone="primary"
+                  />
+                </View>
+                <Pressable
+                  onPress={startTutorial}
+                  style={({ pressed }) => [
+                    styles.setupHelpButton,
+                    pressed && styles.setupHelpButtonPressed
+                  ]}
+                >
+                  <Text style={styles.setupHelpGlyph}>?</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
+
+          {activeSetupStep === "ante" ? (
+            <>
+              <View style={styles.setupSection}>
+                <Text style={styles.controlSectionLabel}>Ante</Text>
+                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+                  <Text style={styles.setupSectionHint}>
+                    Ante is your starting bankroll. Every tile costs 1 percent of it.
+                  </Text>
+                  <View style={styles.setupChipRow}>
+                    {BUY_INS.map((buyIn) => {
+                      const selected = selectedBuyIn === buyIn;
+
+                      return (
+                        <Pressable
+                          key={buyIn}
+                          onPress={() => setSelectedBuyIn(buyIn)}
+                          style={({ pressed }) => [
+                            styles.buyInChip,
+                            styles.setupChip,
+                            selected && styles.buyInChipSelected,
+                            pressed && styles.buyInChipPressed
+                          ]}
+                        >
+                          <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
+                            {formatChipCount(buyIn)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.setupMetaGrid}>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Start Bank</Text>
+                      <Text style={styles.setupMetaValue}>{formatChipCount(selectedBuyIn)}</Text>
+                    </View>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Per Tile</Text>
+                      <Text style={styles.setupMetaValue}>
+                        {formatChipCount(calculateMoveCost(selectedBuyIn))}
+                      </Text>
+                    </View>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Live Score</Text>
+                      <Text style={styles.setupMetaValue}>{formatChipCount(selectedBuyIn)}</Text>
+                    </View>
+                  </View>
+                  {!canAfford ? (
+                    <Text style={styles.setupWarning}>
+                      Wallet is below the selected ante.
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.setupActionsSplit}>
+                <View style={styles.setupActionHalf}>
+                  <GameButton compact label="Back" onPress={() => goToSetupStep("splash")} />
+                </View>
+                <View style={styles.setupActionHalf}>
+                  <GameButton
+                    compact
+                    label="Next"
+                    onPress={() => goToSetupStep("difficulty")}
+                    tone="primary"
+                  />
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          {activeSetupStep === "difficulty" ? (
+            <>
+              <View style={styles.setupSection}>
+                <Text style={styles.controlSectionLabel}>Difficulty</Text>
+                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+                  <Text style={styles.setupSectionHint}>
+                    Easy starts clean. Medium seeds 3 tiles with 2x bonus and penalty. Hard seeds 6 tiles with a 4x 21 bonus.
+                  </Text>
+                  <View style={styles.setupDifficultyStack}>
+                    {DIFFICULTY_OPTIONS.map((option) => {
+                      const selected = selectedDifficulty === option.key;
+
+                      return (
+                        <Pressable
+                          key={option.key}
+                          onPress={() => setSelectedDifficulty(option.key)}
+                          style={({ pressed }) => [
+                            styles.setupDifficultyCard,
+                            selected && styles.setupDifficultyCardSelected,
+                            pressed && styles.setupDifficultyCardPressed
+                          ]}
+                        >
+                          <View style={styles.setupDifficultyCopy}>
+                            <Text
+                              style={[
+                                styles.setupDifficultyLabel,
+                                selected && styles.setupDifficultyLabelSelected
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                            <Text style={styles.setupDifficultyDescription}>
+                              {option.description}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.setupDifficultyState,
+                              selected && styles.setupDifficultyStateSelected
+                            ]}
+                          >
+                            {selected ? "Ready" : "Select"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.setupMetaGrid}>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Opening Grid</Text>
+                      <Text style={styles.setupMetaValue}>{setupSelectedOpeningLabel}</Text>
+                    </View>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>21 Bonus</Text>
+                      <Text style={styles.setupMetaValue}>
+                        +
+                        {formatChipCount(
+                          calculateBlackjackBonus(
+                            selectedBuyIn,
+                            selectedDifficultyOption.bonusMultiplier
+                          )
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.setupMetaCard}>
+                      <Text style={styles.setupMetaLabel}>Bust</Text>
+                      <Text style={styles.setupMetaValue}>
+                        -
+                        {formatChipCount(
+                          calculateBustPenalty(
+                            selectedBuyIn,
+                            selectedDifficultyOption.penaltyMultiplier
+                          )
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.setupActionsSplit}>
+                {!tutorialActive ? (
+                  <View style={styles.setupActionHalf}>
+                    <GameButton compact label="Back" onPress={() => goToSetupStep("ante")} />
+                  </View>
+                ) : null}
+                <View
+                  ref={dealButtonRef}
+                  style={[
+                    tutorialActive ? styles.setupPrimaryAction : styles.setupActionHalf
+                  ]}
+                >
+                  <GameButton
+                    compact
+                    disabled={!canAfford}
+                    label="Start Table"
+                    onPress={startRun}
+                    tone="primary"
+                  />
+                </View>
+              </View>
+            </>
+          ) : null}
         </View>
-      </View>
+      </ScrollView>
     </View>
   ) : null;
   function renderGameBanner(padding: number, compact: boolean) {
@@ -3434,6 +3677,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     width: "100%"
   },
+  setupActionsSplit: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupActionHalf: {
+    flex: 1
+  },
   setupBody: {
     color: "rgba(241, 245, 233, 0.84)",
     fontFamily: theme.fonts.body,
@@ -3453,6 +3705,35 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 20, width: 0 },
     shadowOpacity: 0.34,
     shadowRadius: 28
+  },
+  setupMetaCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.07)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minWidth: 104,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm
+  },
+  setupMetaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupMetaLabel: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  setupMetaValue: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.bodyBold,
+    fontSize: 14
   },
   setupChip: {
     minHeight: 46,
@@ -3560,6 +3841,34 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.lg,
     position: "relative"
   },
+  setupIntroCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.07)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    gap: theme.spacing.xs,
+    minWidth: 120,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm
+  },
+  setupIntroDetail: {
+    color: "rgba(241, 245, 233, 0.74)",
+    fontFamily: theme.fonts.body,
+    fontSize: 12,
+    lineHeight: 17
+  },
+  setupIntroGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    width: "100%"
+  },
+  setupIntroStep: {
+    color: "#e6fff0",
+    fontFamily: theme.fonts.bodyBold,
+    fontSize: 13
+  },
   setupKicker: {
     color: "#8ef0bc",
     fontFamily: theme.fonts.label,
@@ -3575,8 +3884,50 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     zIndex: 50
   },
+  setupOverlayContent: {
+    alignItems: "center",
+    flexGrow: 1,
+    justifyContent: "center"
+  },
+  setupOverlayScroll: {
+    width: "100%"
+  },
   setupPrimaryAction: {
     flex: 1
+  },
+  setupProgressDot: {
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    borderRadius: 999,
+    height: 8,
+    width: 8
+  },
+  setupProgressDotActive: {
+    backgroundColor: "#f4f9ec",
+    transform: [{ scale: 1.25 }]
+  },
+  setupProgressDotComplete: {
+    backgroundColor: "#8ef0bc"
+  },
+  setupProgressLabel: {
+    color: "rgba(241, 245, 233, 0.6)",
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  setupProgressLabelActive: {
+    color: "#f4f9ec"
+  },
+  setupProgressRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.sm
+  },
+  setupProgressStep: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.xs
   },
   setupSection: {
     gap: theme.spacing.sm,
