@@ -331,7 +331,7 @@ export function GameExperience() {
   const topHeight = isPortraitMobile
     ? clamp(Math.round(availableHeight * 0.11), 56, 72)
     : clamp(Math.round(availableHeight * 0.14), 64, 88);
-  const portraitBottomHeight = clamp(Math.round(availableHeight * 0.16), 94, 124);
+  const portraitBottomHeight = 0;
   const radius = clamp(Math.round(frameWidth * 0.05), 18, 28);
   const boardPadX = isLandscapeMobile ? 8 : 10;
   const boardPadY = isPortraitMobile ? 4 : 8;
@@ -1784,14 +1784,19 @@ export function GameExperience() {
           <View style={[styles.bannerGlow, styles.bannerGlowCool]} />
           <View style={[styles.bannerHeader, compact && styles.bannerHeaderCompact]}>
             <View style={styles.bannerCopy}>
-              <Text style={styles.bannerEyebrow}>Big Slick Table</Text>
               <Text style={[styles.bannerTitle, compact && styles.bannerTitleCompact]}>
                 21 Stackem
               </Text>
-              <Text style={styles.bannerSubtitle}>
-                Play costs 1%. Hit 21 for 25%. Busts burn 10%.
-              </Text>
             </View>
+            <Pressable
+              onPress={() => router.replace("/" as Href)}
+              style={({ pressed }) => [
+                styles.bannerExitButton,
+                pressed && styles.bannerExitButtonPressed
+              ]}
+            >
+              <Text style={styles.bannerExitGlyph}>X</Text>
+            </Pressable>
           </View>
           <View style={styles.bannerRuleRow}>
             {bannerRules.map((rule) => (
@@ -1831,6 +1836,11 @@ export function GameExperience() {
             ))}
           </View>
         </View>
+        {!compact ? (
+          <View style={styles.bannerQueueStrip}>
+            {renderQueueUndoTray(portraitQueueTileWidth, portraitQueueTileHeight, portraitQueueGap)}
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -2296,20 +2306,6 @@ export function GameExperience() {
 
   const portraitProfile = renderGameBanner(framePad, false);
 
-  const portraitDock = (
-    <View
-      style={[
-        styles.strip,
-        styles.bottomStrip,
-        { borderRadius: radius, minHeight: portraitBottomHeight, padding: framePad }
-      ]}
-    >
-      <View style={styles.mobileQueueDock}>
-        {renderQueueUndoTray(portraitQueueTileWidth, portraitQueueTileHeight, portraitQueueGap)}
-      </View>
-    </View>
-  );
-
   const sideRail = (
     <View style={[styles.sideRail, { gap: railGap, width: sideRailWidth }]}>
       {renderGameBanner(railPad, true)}
@@ -2325,7 +2321,6 @@ export function GameExperience() {
     <View style={[styles.frame, styles.mobileFrame, { gap: frameGap, width: frameWidth }]}>
       {portraitProfile}
       <View style={styles.boardWrap}>{boardPanel}</View>
-      {portraitDock}
     </View>
   );
 
@@ -2959,6 +2954,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1.7,
     textTransform: "uppercase"
   },
+  bannerExitButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(5, 5, 5, 0.22)",
+    borderColor: "rgba(255, 255, 255, 0.14)",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34
+  },
+  bannerExitButtonPressed: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)"
+  },
+  bannerExitGlyph: {
+    color: "#f4f9ec",
+    fontFamily: theme.fonts.label,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
   bannerFooter: {
     alignItems: "center",
     flexDirection: "row",
@@ -3039,6 +3054,10 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.fonts.bodyBold,
     fontSize: 13
+  },
+  bannerQueueStrip: {
+    alignItems: "center",
+    justifyContent: "center"
   },
   bannerRuleChip: {
     backgroundColor: "rgba(255, 255, 255, 0.08)",
@@ -3278,10 +3297,6 @@ const styles = StyleSheet.create({
   lineValueTwentyOne: { color: "#d7ffe5" },
   matrix: { justifyContent: "space-between" },
   matrixRow: { flexDirection: "row" },
-  mobileQueueDock: {
-    alignItems: "center",
-    justifyContent: "center"
-  },
   navButton: {
     alignItems: "center",
     backgroundColor: theme.colors.cardMuted,
