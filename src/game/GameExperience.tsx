@@ -1676,91 +1676,111 @@ export function GameExperience() {
         </LinearGradient>
 
         <View style={styles.setupSection}>
-          <Text style={styles.setupSectionLabel}>Ante</Text>
-          <View style={styles.setupChipRow}>
-            {BUY_INS.map((buyIn) => {
-              const selected = selectedBuyIn === buyIn;
+          <Text style={styles.controlSectionLabel}>Ante</Text>
+          <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+            <Text style={styles.setupSectionHint}>Pick the bankroll for this run.</Text>
+            <View style={styles.setupChipRow}>
+              {BUY_INS.map((buyIn) => {
+                const selected = selectedBuyIn === buyIn;
 
-              return (
-                <Pressable
-                  key={buyIn}
-                  onPress={() => setSelectedBuyIn(buyIn)}
-                  style={({ pressed }) => [
-                    styles.buyInChip,
-                    styles.setupChip,
-                    selected && styles.buyInChipSelected,
-                    pressed && styles.buyInChipPressed
-                  ]}
-                >
-                  <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
-                    {formatChipCount(buyIn)}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                return (
+                  <Pressable
+                    key={buyIn}
+                    onPress={() => setSelectedBuyIn(buyIn)}
+                    style={({ pressed }) => [
+                      styles.buyInChip,
+                      styles.setupChip,
+                      selected && styles.buyInChipSelected,
+                      pressed && styles.buyInChipPressed
+                    ]}
+                  >
+                    <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
+                      {formatChipCount(buyIn)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
 
         <View style={styles.setupSection}>
-          <Text style={styles.setupSectionLabel}>Difficulty</Text>
-          <View style={styles.setupDifficultyStack}>
-            {DIFFICULTY_OPTIONS.map((option) => {
-              const selected = selectedDifficulty === option.key;
+          <Text style={styles.controlSectionLabel}>Difficulty</Text>
+          <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+            <Text style={styles.setupSectionHint}>Choose the table profile for this run.</Text>
+            <View style={styles.setupDifficultyStack}>
+              {DIFFICULTY_OPTIONS.map((option) => {
+                const selected = selectedDifficulty === option.key;
 
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => setSelectedDifficulty(option.key)}
-                  style={({ pressed }) => [
-                    styles.setupDifficultyCard,
-                    selected && styles.setupDifficultyCardSelected,
-                    pressed && styles.setupDifficultyCardPressed
-                  ]}
-                >
-                  <View style={styles.setupDifficultyCopy}>
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => setSelectedDifficulty(option.key)}
+                    style={({ pressed }) => [
+                      styles.setupDifficultyCard,
+                      selected && styles.setupDifficultyCardSelected,
+                      pressed && styles.setupDifficultyCardPressed
+                    ]}
+                  >
+                    <View style={styles.setupDifficultyCopy}>
+                      <Text
+                        style={[
+                          styles.setupDifficultyLabel,
+                          selected && styles.setupDifficultyLabelSelected
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      <Text style={styles.setupDifficultyDescription}>{option.description}</Text>
+                    </View>
                     <Text
                       style={[
-                        styles.setupDifficultyLabel,
-                        selected && styles.setupDifficultyLabelSelected
+                        styles.setupDifficultyState,
+                        selected && styles.setupDifficultyStateSelected
                       ]}
                     >
-                      {option.label}
+                      {selected ? "Ready" : "Select"}
                     </Text>
-                    <Text style={styles.setupDifficultyDescription}>{option.description}</Text>
-                  </View>
-                  <Text style={styles.setupDifficultyState}>{selected ? "Ready" : "Select"}</Text>
-                </Pressable>
-              );
-            })}
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.setupFootnote}>
+              Difficulty tuning is the next pass. This selection is saved now so the start flow is in place.
+            </Text>
           </View>
-          <Text style={styles.setupFootnote}>
-            Difficulty tuning is the next pass. This selection is saved now so the start flow is in place.
-          </Text>
         </View>
 
-        <View style={styles.setupActions}>
-          <View ref={dealButtonRef} style={styles.setupPrimaryAction}>
-            <GameButton
-              disabled={!canAfford}
-              label="Start Table"
-              onPress={startRun}
-              tone="primary"
-            />
+        <View style={styles.setupSection}>
+          <Text style={styles.controlSectionLabel}>Table</Text>
+          <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
+            <Text style={styles.setupSectionHint}>
+              Start a new run or launch the guided tutorial.
+            </Text>
+            <View style={styles.setupActions}>
+              <View ref={dealButtonRef} style={styles.setupPrimaryAction}>
+                <GameButton
+                  disabled={!canAfford}
+                  label="Start Table"
+                  onPress={startRun}
+                  tone="primary"
+                />
+              </View>
+              <Pressable
+                onPress={startTutorial}
+                style={({ pressed }) => [
+                  styles.setupHelpButton,
+                  pressed && styles.setupHelpButtonPressed
+                ]}
+              >
+                <Text style={styles.setupHelpGlyph}>?</Text>
+              </Pressable>
+            </View>
+            {!canAfford ? (
+              <Text style={styles.setupWarning}>Wallet is below the selected ante.</Text>
+            ) : null}
           </View>
-          <Pressable
-            onPress={startTutorial}
-            style={({ pressed }) => [
-              styles.setupHelpButton,
-              pressed && styles.setupHelpButtonPressed
-            ]}
-          >
-            <Text style={styles.setupHelpGlyph}>?</Text>
-          </Pressable>
         </View>
-
-        {!canAfford ? (
-          <Text style={styles.setupWarning}>Wallet is below the selected ante.</Text>
-        ) : null}
       </View>
     </View>
   ) : null;
@@ -3488,11 +3508,24 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   setupDifficultyState: {
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 999,
+    borderWidth: 1,
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.label,
     fontSize: 10,
     letterSpacing: 1.2,
+    minWidth: 68,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 7,
+    textAlign: "center",
     textTransform: "uppercase"
+  },
+  setupDifficultyStateSelected: {
+    backgroundColor: "rgba(110, 255, 186, 0.14)",
+    borderColor: "rgba(110, 255, 186, 0.28)",
+    color: "#dfffea"
   },
   setupFootnote: {
     color: theme.colors.subtleText,
@@ -3502,16 +3535,16 @@ const styles = StyleSheet.create({
   },
   setupHelpButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: "rgba(255, 255, 255, 0.035)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     justifyContent: "center",
     minHeight: 64,
-    width: 64
+    width: 72
   },
   setupHelpButtonPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)"
+    backgroundColor: "rgba(255, 255, 255, 0.08)"
   },
   setupHelpGlyph: {
     color: theme.colors.text,
@@ -3549,12 +3582,22 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     width: "100%"
   },
+  setupSectionHint: {
+    color: "rgba(241, 245, 233, 0.7)",
+    fontFamily: theme.fonts.body,
+    fontSize: 12,
+    lineHeight: 17
+  },
   setupSectionLabel: {
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.label,
     fontSize: 10,
     letterSpacing: 1.5,
     textTransform: "uppercase"
+  },
+  setupSectionSurface: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md
   },
   setupTitle: {
     color: "#f4f9ec",
