@@ -1735,95 +1735,32 @@ export function GameExperience() {
         <View
           style={[
             styles.setupCard,
-            { width: Math.min(frameWidth, isDesktop ? 540 : 480) }
+            { width: Math.min(frameWidth, isDesktop ? 460 : 400) }
           ]}
         >
-          <LinearGradient
-            colors={["#133225", "#0a0f0d", "#38170f"]}
-            end={{ x: 1, y: 1 }}
-            start={{ x: 0, y: 0 }}
-            style={styles.setupHero}
-          >
-            <View style={[styles.bannerGlow, styles.bannerGlowWarm]} />
-            <View style={[styles.bannerGlow, styles.bannerGlowCool]} />
+          <View style={styles.setupHeader}>
             <Text style={styles.setupKicker}>
-              {activeSetupStep === "splash" ? "Guided Start" : `Step ${setupStepIndex + 1} of 3`}
+              {activeSetupStep === "splash" ? "21 Stackem" : `Step ${setupStepIndex + 1} of 3`}
             </Text>
             <Text style={styles.setupTitle}>{setupWizardTitle}</Text>
             <Text style={styles.setupBody}>{setupWizardBody}</Text>
-            <View style={styles.setupProgressRow}>
-              {["Welcome", "Ante", "Difficulty"].map((label, index) => {
-                const active = index === setupStepIndex;
-                const complete = index < setupStepIndex;
-
-                return (
-                  <View key={label} style={styles.setupProgressStep}>
-                    <View
-                      style={[
-                        styles.setupProgressDot,
-                        active && styles.setupProgressDotActive,
-                        complete && styles.setupProgressDotComplete
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.setupProgressLabel,
-                        active && styles.setupProgressLabelActive
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </LinearGradient>
+          </View>
 
           {activeSetupStep === "splash" ? (
             <>
-              <View style={styles.setupSection}>
-                <Text style={styles.controlSectionLabel}>Table Flow</Text>
-                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-                  <View style={styles.setupIntroGrid}>
-                    {[
-                      {
-                        detail: "Pick the bankroll you bring to the table.",
-                        step: "1 Ante"
-                      },
-                      {
-                        detail: "Choose how hot the opening board plays.",
-                        step: "2 Difficulty"
-                      },
-                      {
-                        detail: "Deal in and start chasing 21s.",
-                        step: "3 Play"
-                      }
-                    ].map((item) => (
-                      <View key={item.step} style={styles.setupIntroCard}>
-                        <Text style={styles.setupIntroStep}>{item.step}</Text>
-                        <Text style={styles.setupIntroDetail}>{item.detail}</Text>
-                      </View>
-                    ))}
+              <View style={styles.setupSimplePanel}>
+                <Text style={styles.setupSimpleLine}>1. Select your ante.</Text>
+                <Text style={styles.setupSimpleLine}>2. Select your difficulty.</Text>
+                <Text style={styles.setupSimpleLine}>3. Start the table.</Text>
+                <View style={styles.setupTagRow}>
+                  <View style={styles.setupTag}>
+                    <Text style={styles.setupTagText}>5 x 5 grid</Text>
                   </View>
-                </View>
-              </View>
-
-              <View style={styles.setupSection}>
-                <Text style={styles.controlSectionLabel}>Table Snapshot</Text>
-                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-                  <View style={styles.setupMetaGrid}>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Grid</Text>
-                      <Text style={styles.setupMetaValue}>5 x 5</Text>
-                    </View>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Queue</Text>
-                      <Text style={styles.setupMetaValue}>3 live tiles</Text>
-                    </View>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Undo</Text>
-                      <Text style={styles.setupMetaValue}>3 per run</Text>
-                    </View>
+                  <View style={styles.setupTag}>
+                    <Text style={styles.setupTagText}>3 tile queue</Text>
+                  </View>
+                  <View style={styles.setupTag}>
+                    <Text style={styles.setupTagText}>3 undo</Text>
                   </View>
                 </View>
               </View>
@@ -1832,7 +1769,7 @@ export function GameExperience() {
                 <View style={styles.setupPrimaryAction}>
                   <GameButton
                     compact
-                    label="Select Ante"
+                    label="Continue"
                     onPress={() => goToSetupStep("ante")}
                     tone="primary"
                   />
@@ -1852,56 +1789,49 @@ export function GameExperience() {
 
           {activeSetupStep === "ante" ? (
             <>
-              <View style={styles.setupSection}>
-                <Text style={styles.controlSectionLabel}>Ante</Text>
-                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-                  <Text style={styles.setupSectionHint}>
-                    Ante is your starting bankroll. Every tile costs 1 percent of it.
-                  </Text>
-                  <View style={styles.setupChipRow}>
-                    {BUY_INS.map((buyIn) => {
-                      const selected = selectedBuyIn === buyIn;
+              <View style={styles.setupSimplePanel}>
+                <Text style={styles.setupSectionHint}>
+                  Ante is your starting bankroll. Each tile placement costs 1 percent.
+                </Text>
+                <View style={styles.setupChipRow}>
+                  {BUY_INS.map((buyIn) => {
+                    const selected = selectedBuyIn === buyIn;
 
-                      return (
-                        <Pressable
-                          key={buyIn}
-                          onPress={() => setSelectedBuyIn(buyIn)}
-                          style={({ pressed }) => [
-                            styles.buyInChip,
-                            styles.setupChip,
-                            selected && styles.buyInChipSelected,
-                            pressed && styles.buyInChipPressed
-                          ]}
-                        >
-                          <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
-                            {formatChipCount(buyIn)}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <View style={styles.setupMetaGrid}>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Start Bank</Text>
-                      <Text style={styles.setupMetaValue}>{formatChipCount(selectedBuyIn)}</Text>
-                    </View>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Per Tile</Text>
-                      <Text style={styles.setupMetaValue}>
-                        {formatChipCount(calculateMoveCost(selectedBuyIn))}
-                      </Text>
-                    </View>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Live Score</Text>
-                      <Text style={styles.setupMetaValue}>{formatChipCount(selectedBuyIn)}</Text>
-                    </View>
-                  </View>
-                  {!canAfford ? (
-                    <Text style={styles.setupWarning}>
-                      Wallet is below the selected ante.
-                    </Text>
-                  ) : null}
+                    return (
+                      <Pressable
+                        key={buyIn}
+                        onPress={() => setSelectedBuyIn(buyIn)}
+                        style={({ pressed }) => [
+                          styles.buyInChip,
+                          styles.setupChip,
+                          selected && styles.buyInChipSelected,
+                          pressed && styles.buyInChipPressed
+                        ]}
+                      >
+                        <Text style={[styles.buyInText, selected && styles.buyInTextSelected]}>
+                          {formatChipCount(buyIn)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
+                <View style={styles.setupMetaGridCompact}>
+                  <View style={styles.setupMetaCardCompact}>
+                    <Text style={styles.setupMetaLabel}>Bankroll</Text>
+                    <Text style={styles.setupMetaValue}>{formatChipCount(selectedBuyIn)}</Text>
+                  </View>
+                  <View style={styles.setupMetaCardCompact}>
+                    <Text style={styles.setupMetaLabel}>Cost / tile</Text>
+                    <Text style={styles.setupMetaValue}>
+                      {formatChipCount(calculateMoveCost(selectedBuyIn))}
+                    </Text>
+                  </View>
+                </View>
+                {!canAfford ? (
+                  <Text style={styles.setupWarning}>
+                    Wallet is below the selected ante.
+                  </Text>
+                ) : null}
               </View>
 
               <View style={styles.setupActionsSplit}>
@@ -1922,80 +1852,75 @@ export function GameExperience() {
 
           {activeSetupStep === "difficulty" ? (
             <>
-              <View style={styles.setupSection}>
-                <Text style={styles.controlSectionLabel}>Difficulty</Text>
-                <View style={[styles.controlSectionSurface, styles.setupSectionSurface]}>
-                  <Text style={styles.setupSectionHint}>
-                    Easy starts clean. Medium seeds 3 tiles with 2x bonus and penalty. Hard seeds 6 tiles with a 4x 21 bonus.
-                  </Text>
-                  <View style={styles.setupDifficultyStack}>
-                    {DIFFICULTY_OPTIONS.map((option) => {
-                      const selected = selectedDifficulty === option.key;
+              <View style={styles.setupSimplePanel}>
+                <Text style={styles.setupSectionHint}>Select how the table opens.</Text>
+                <View style={styles.setupDifficultyStack}>
+                  {DIFFICULTY_OPTIONS.map((option) => {
+                    const selected = selectedDifficulty === option.key;
 
-                      return (
-                        <Pressable
-                          key={option.key}
-                          onPress={() => setSelectedDifficulty(option.key)}
-                          style={({ pressed }) => [
-                            styles.setupDifficultyCard,
-                            selected && styles.setupDifficultyCardSelected,
-                            pressed && styles.setupDifficultyCardPressed
-                          ]}
-                        >
-                          <View style={styles.setupDifficultyCopy}>
-                            <Text
-                              style={[
-                                styles.setupDifficultyLabel,
-                                selected && styles.setupDifficultyLabelSelected
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                            <Text style={styles.setupDifficultyDescription}>
-                              {option.description}
-                            </Text>
-                          </View>
+                    return (
+                      <Pressable
+                        key={option.key}
+                        onPress={() => setSelectedDifficulty(option.key)}
+                        style={({ pressed }) => [
+                          styles.setupDifficultyCard,
+                          selected && styles.setupDifficultyCardSelected,
+                          pressed && styles.setupDifficultyCardPressed
+                        ]}
+                      >
+                        <View style={styles.setupDifficultyCopy}>
                           <Text
                             style={[
-                              styles.setupDifficultyState,
-                              selected && styles.setupDifficultyStateSelected
+                              styles.setupDifficultyLabel,
+                              selected && styles.setupDifficultyLabelSelected
                             ]}
                           >
-                            {selected ? "Ready" : "Select"}
+                            {option.label}
                           </Text>
-                        </Pressable>
-                      );
-                    })}
+                          <Text style={styles.setupDifficultyDescription}>
+                            {option.description}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.setupDifficultyState,
+                            selected && styles.setupDifficultyStateSelected
+                          ]}
+                        >
+                          {selected ? "Ready" : "Select"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={styles.setupMetaGridCompact}>
+                  <View style={styles.setupMetaCardCompact}>
+                    <Text style={styles.setupMetaLabel}>Grid</Text>
+                    <Text style={styles.setupMetaValue}>{setupSelectedOpeningLabel}</Text>
                   </View>
-                  <View style={styles.setupMetaGrid}>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Opening Grid</Text>
-                      <Text style={styles.setupMetaValue}>{setupSelectedOpeningLabel}</Text>
-                    </View>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>21 Bonus</Text>
-                      <Text style={styles.setupMetaValue}>
-                        +
-                        {formatChipCount(
-                          calculateBlackjackBonus(
-                            selectedBuyIn,
-                            selectedDifficultyOption.bonusMultiplier
-                          )
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.setupMetaCard}>
-                      <Text style={styles.setupMetaLabel}>Bust</Text>
-                      <Text style={styles.setupMetaValue}>
-                        -
-                        {formatChipCount(
-                          calculateBustPenalty(
-                            selectedBuyIn,
-                            selectedDifficultyOption.penaltyMultiplier
-                          )
-                        )}
-                      </Text>
-                    </View>
+                  <View style={styles.setupMetaCardCompact}>
+                    <Text style={styles.setupMetaLabel}>21 Bonus</Text>
+                    <Text style={styles.setupMetaValue}>
+                      +
+                      {formatChipCount(
+                        calculateBlackjackBonus(
+                          selectedBuyIn,
+                          selectedDifficultyOption.bonusMultiplier
+                        )
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.setupMetaCardCompact}>
+                    <Text style={styles.setupMetaLabel}>Bust</Text>
+                    <Text style={styles.setupMetaValue}>
+                      -
+                      {formatChipCount(
+                        calculateBustPenalty(
+                          selectedBuyIn,
+                          selectedDifficultyOption.penaltyMultiplier
+                        )
+                      )}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -3689,22 +3614,25 @@ const styles = StyleSheet.create({
   setupBody: {
     color: "rgba(241, 245, 233, 0.84)",
     fontFamily: theme.fonts.body,
-    fontSize: 14,
-    lineHeight: 20,
-    maxWidth: 420
+    fontSize: 13,
+    lineHeight: 18,
+    maxWidth: 360
   },
   setupCard: {
     backgroundColor: "rgba(10, 12, 14, 0.98)",
     borderColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: theme.radius.xl,
     borderWidth: 1,
-    gap: theme.spacing.md,
-    overflow: "hidden",
+    gap: theme.spacing.sm,
     padding: theme.spacing.md,
     shadowColor: "#000000",
-    shadowOffset: { height: 20, width: 0 },
-    shadowOpacity: 0.34,
-    shadowRadius: 28
+    shadowOffset: { height: 12, width: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18
+  },
+  setupHeader: {
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs
   },
   setupMetaCard: {
     backgroundColor: "rgba(255, 255, 255, 0.03)",
@@ -3723,6 +3651,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     width: "100%"
   },
+  setupMetaGridCompact: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+    width: "100%"
+  },
   setupMetaLabel: {
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.label,
@@ -3735,15 +3669,26 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.bodyBold,
     fontSize: 14
   },
+  setupMetaCardCompact: {
+    backgroundColor: "rgba(255, 255, 255, 0.025)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minWidth: 96,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs
+  },
   setupChip: {
-    minHeight: 46,
-    minWidth: 84,
-    paddingHorizontal: theme.spacing.md
+    minHeight: 42,
+    minWidth: 76,
+    paddingHorizontal: theme.spacing.sm
   },
   setupChipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     width: "100%"
   },
   setupDifficultyCard: {
@@ -3753,9 +3698,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.sm
   },
   setupDifficultyCardPressed: {
@@ -3773,13 +3718,13 @@ const styles = StyleSheet.create({
   setupDifficultyDescription: {
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.body,
-    fontSize: 12,
-    lineHeight: 17
+    fontSize: 11,
+    lineHeight: 15
   },
   setupDifficultyLabel: {
     color: theme.colors.text,
     fontFamily: theme.fonts.bodyBold,
-    fontSize: 15
+    fontSize: 14
   },
   setupDifficultyLabelSelected: {
     color: "#dfffea"
@@ -3821,8 +3766,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     justifyContent: "center",
-    minHeight: 64,
-    width: 72
+    minHeight: 56,
+    width: 56
   },
   setupHelpButtonPressed: {
     backgroundColor: "rgba(255, 255, 255, 0.08)"
@@ -3830,8 +3775,8 @@ const styles = StyleSheet.create({
   setupHelpGlyph: {
     color: theme.colors.text,
     fontFamily: theme.fonts.display,
-    fontSize: 28,
-    lineHeight: 28
+    fontSize: 24,
+    lineHeight: 24
   },
   setupHero: {
     borderRadius: theme.radius.xl,
@@ -3887,7 +3832,8 @@ const styles = StyleSheet.create({
   setupOverlayContent: {
     alignItems: "center",
     flexGrow: 1,
-    justifyContent: "center"
+    justifyContent: "center",
+    paddingVertical: theme.spacing.lg
   },
   setupOverlayScroll: {
     width: "100%"
@@ -3939,6 +3885,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17
   },
+  setupSimpleLine: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.body,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  setupSimplePanel: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    width: "100%"
+  },
   setupSectionLabel: {
     color: theme.colors.subtleText,
     fontFamily: theme.fonts.label,
@@ -3953,8 +3914,28 @@ const styles = StyleSheet.create({
   setupTitle: {
     color: "#f4f9ec",
     fontFamily: theme.fonts.display,
-    fontSize: 36,
-    lineHeight: 36
+    fontSize: 28,
+    lineHeight: 28
+  },
+  setupTag: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6
+  },
+  setupTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs
+  },
+  setupTagText: {
+    color: theme.colors.subtleText,
+    fontFamily: theme.fonts.label,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: "uppercase"
   },
   setupWarning: {
     color: "#ffb1b1",
