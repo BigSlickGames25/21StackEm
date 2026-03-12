@@ -331,7 +331,7 @@ export function GameExperience() {
   const topHeight = isPortraitMobile
     ? clamp(Math.round(availableHeight * 0.11), 56, 72)
     : clamp(Math.round(availableHeight * 0.14), 64, 88);
-  const portraitBottomHeight = clamp(Math.round(availableHeight * 0.25), 156, 220);
+  const portraitBottomHeight = clamp(Math.round(availableHeight * 0.16), 94, 124);
   const radius = clamp(Math.round(frameWidth * 0.05), 18, 28);
   const boardPadX = isLandscapeMobile ? 8 : 10;
   const boardPadY = isPortraitMobile ? 4 : 8;
@@ -378,27 +378,26 @@ export function GameExperience() {
   const splitFrameHeight = Math.min(availableHeight, isDesktop ? 760 : availableHeight);
   const frameHeight = isPortraitMobile ? portraitFrameHeight : splitFrameHeight;
   const portraitQueueGap = clamp(Math.round(frameWidth * 0.014), 4, 8);
-  const portraitControlWidth = clamp(Math.round(frameWidth * 0.3), 100, 136);
-  const portraitQueueWidth = Math.max(220, frameWidth - framePad * 4);
+  const portraitQueueWidth = Math.max(248, frameWidth - framePad * 4);
   const portraitQueueTileWidth = clamp(
-    Math.floor((portraitQueueWidth - portraitQueueGap * 2) / 3),
+    Math.floor((portraitQueueWidth - portraitQueueGap * 3) / 4),
     40,
-    78
+    70
   );
   const portraitQueueTileHeight = clamp(
-    Math.round(portraitQueueTileWidth * 1.08),
-    48,
-    72
+    Math.round(portraitQueueTileWidth * 1.02),
+    46,
+    64
   );
   const railPad = isDesktop ? 14 : 10;
   const railGap = isDesktop ? 10 : 8;
   const railInnerWidth = Math.max(120, sideRailWidth - railPad * 2);
   const railQueueTileWidth = clamp(
-    Math.floor((railInnerWidth - railGap * 2) / 3),
-    34,
-    56
+    Math.floor((railInnerWidth - railGap * 3) / 4),
+    30,
+    52
   );
-  const railQueueTileHeight = clamp(Math.round(railQueueTileWidth * 1.12), 42, 66);
+  const railQueueTileHeight = clamp(Math.round(railQueueTileWidth * 1.04), 38, 58);
   const queueDense = isPortraitMobile
     ? portraitQueueTileWidth < 62
     : railQueueTileWidth < 48;
@@ -407,7 +406,7 @@ export function GameExperience() {
   const middleHeight = boardPanelHeight;
   const boardStripHeight = boardPanelHeight;
   const bottomHeight = portraitBottomHeight;
-  const controlWidth = portraitControlWidth;
+  const controlWidth = clamp(Math.round(frameWidth * 0.3), 100, 136);
   const queueGap = portraitQueueGap;
   const queueTileWidth = portraitQueueTileWidth;
   const queueTileHeight = portraitQueueTileHeight;
@@ -1315,7 +1314,10 @@ export function GameExperience() {
     { label: "21", value: `+${formatChipCount(currentBlackjackBonus)}` },
     { label: "Bust", value: `-${formatChipCount(currentBustPenalty)}` }
   ];
-  const bannerStats = [{ label: "Wallet", value: wallet }];
+  const bannerStats = [
+    { label: "Wallet", value: wallet },
+    { label: "Score", value: currentScoreLabel }
+  ];
   const specialTargetLabel = pendingSpecialMove
     ? `Row ${pendingSpecialMove.target.row + 1} - Column ${pendingSpecialMove.target.col + 1}`
     : "";
@@ -1737,13 +1739,14 @@ export function GameExperience() {
         </View>
 
         <View style={styles.setupActions}>
-          <GameButton
-            disabled={!canAfford}
-            label="Start Table"
-            onPress={startRun}
-            style={styles.setupPrimaryAction}
-            tone="primary"
-          />
+          <View ref={dealButtonRef} style={styles.setupPrimaryAction}>
+            <GameButton
+              disabled={!canAfford}
+              label="Start Table"
+              onPress={startRun}
+              tone="primary"
+            />
+          </View>
           <Pressable
             onPress={startTutorial}
             style={({ pressed }) => [
@@ -1761,8 +1764,6 @@ export function GameExperience() {
       </View>
     </View>
   ) : null;
-  const runControlDisabled = dragging || interactionLocked || (!currentWorld && !canAfford);
-
   function renderGameBanner(padding: number, compact: boolean) {
     return (
       <View
@@ -1834,50 +1835,27 @@ export function GameExperience() {
     );
   }
 
-  function renderControlsPanel(compact: boolean) {
-    return (
-      <View style={[styles.controlMenu, compact && styles.controlMenuCompact]}>
-        <View ref={dealButtonRef}>
-          {currentWorld ? (
-            <LinearGradient
-              colors={["rgba(20, 58, 41, 0.96)", "rgba(9, 14, 11, 0.98)", "rgba(48, 24, 16, 0.94)"]}
-              end={{ x: 1, y: 1 }}
-              start={{ x: 0, y: 0 }}
-              style={styles.scoreCard}
-            >
-              <Text style={styles.scoreLabel}>Score</Text>
-              <Text numberOfLines={1} style={styles.scoreValue}>
-                {currentScoreLabel}
-              </Text>
-              <Text style={styles.scoreMeta}>{currentWorld.turns} moves played</Text>
-            </LinearGradient>
-          ) : (
-            <GameButton
-              compact
-              disabled={runControlDisabled}
-              label="Start Table"
-              onPress={startRun}
-              tone="primary"
-            />
-          )}
-        </View>
+  function renderQueueUndoTray(tileWidth: number, tileHeight: number, gap: number) {
+    const totalWidth = tileWidth * 4 + gap * 3;
 
-        <View style={styles.utilityRow}>
-          <View ref={undoButtonRef} style={[styles.utilityButtonWrap, styles.utilityButtonWrapHalf]}>
-            <Pressable
-              disabled={!undoAvailable}
-              onPress={undoLastMove}
-              style={({ pressed }) => [
-                styles.utilityButton,
-                styles.utilityButtonIcon,
-                !undoAvailable && styles.utilityButtonDisabled,
-                pressed && undoAvailable && styles.utilityButtonPressed
-              ]}
-            >
-              <Text style={styles.utilityGlyph}>{"\u21B6"}</Text>
-              <Text style={styles.utilityMeta}>{undoRemaining}</Text>
-            </Pressable>
-          </View>
+    return (
+      <View style={[styles.queueUndoRow, { gap, width: totalWidth }]}>
+        <View ref={queueStageRef}>{renderQueue(tileWidth, tileHeight, gap)}</View>
+        <View ref={undoButtonRef}>
+          <Pressable
+            disabled={!undoAvailable}
+            onPress={undoLastMove}
+            style={({ pressed }) => [
+              styles.utilityButton,
+              styles.queueUndoButton,
+              { height: tileHeight, width: tileWidth },
+              !undoAvailable && styles.utilityButtonDisabled,
+              pressed && undoAvailable && styles.utilityButtonPressed
+            ]}
+          >
+            <Text style={styles.utilityGlyph}>{"\u21B6"}</Text>
+            <Text style={styles.utilityMeta}>{undoRemaining}</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -2326,15 +2304,8 @@ export function GameExperience() {
         { borderRadius: radius, minHeight: portraitBottomHeight, padding: framePad }
       ]}
     >
-      <View style={[styles.bottomMain, styles.bottomMainPortrait, { gap: frameGap }]}>
-        <View style={[styles.controlWell, styles.controlWellFull]}>{renderControlsPanel(false)}</View>
-        <View style={[styles.queueWell, styles.queueWellStructured]}>
-          <View style={[styles.controlSectionSurface, styles.queueSurface]}>
-            <View ref={queueStageRef}>
-              {renderQueue(portraitQueueTileWidth, portraitQueueTileHeight, portraitQueueGap)}
-            </View>
-          </View>
-        </View>
+      <View style={styles.mobileQueueDock}>
+        {renderQueueUndoTray(portraitQueueTileWidth, portraitQueueTileHeight, portraitQueueGap)}
       </View>
     </View>
   );
@@ -2344,20 +2315,7 @@ export function GameExperience() {
       {renderGameBanner(railPad, true)}
 
       <View style={[styles.strip, styles.sideCard, { borderRadius: radius, padding: railPad }]}>
-        <View style={[styles.controlSectionSurface, styles.queueSurface]} ref={queueStageRef}>
-          {renderQueue(railQueueTileWidth, railQueueTileHeight, railGap)}
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.strip,
-          styles.sideCard,
-          styles.sideControls,
-          { borderRadius: radius, padding: railPad }
-        ]}
-      >
-        {renderControlsPanel(true)}
+        {renderQueueUndoTray(railQueueTileWidth, railQueueTileHeight, railGap)}
       </View>
 
     </View>
@@ -3320,6 +3278,10 @@ const styles = StyleSheet.create({
   lineValueTwentyOne: { color: "#d7ffe5" },
   matrix: { justifyContent: "space-between" },
   matrixRow: { flexDirection: "row" },
+  mobileQueueDock: {
+    alignItems: "center",
+    justifyContent: "center"
+  },
   navButton: {
     alignItems: "center",
     backgroundColor: theme.colors.cardMuted,
@@ -3383,6 +3345,16 @@ const styles = StyleSheet.create({
   queueEffectsLayer: {
     ...StyleSheet.absoluteFillObject,
     overflow: "visible"
+  },
+  queueUndoButton: {
+    gap: 4,
+    paddingHorizontal: 0,
+    paddingVertical: 0
+  },
+  queueUndoRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center"
   },
   queueRow: {
     alignItems: "center",
